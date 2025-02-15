@@ -3,120 +3,72 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { signInWithEmailAndPassword, sendPasswordResetEmail, setPersistence, browserLocalPersistence, browserSessionPersistence } from 'firebase/auth';
-import { collection, query, where, getDocs } from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase';
-import { FirebaseError } from 'firebase/app';
 import Image from 'next/image';
 import { ArrowLeft } from 'lucide-react';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
+import { FirebaseError } from 'firebase/app';
+import ReCAPTCHA from 'react-google-recaptcha';
 
 export default function Login() {
-  const [identifier, setIdentifier] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
+  const [formData, setFormData] = useState({
+    email: '',
+    password: '',
+  });
+  const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
-  const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const router = useRouter();
 
-  const handlePasswordReset = async () => {
-    if (!identifier) {
-      setError('Please enter your email or username first');
-      return;
+  const validateEmail = (email: string) => {
+    const domain = '@warhawks.ulm.edu';
+    if (!email.endsWith(domain)) {
+      return `Email must use the ${domain} domain`;
     }
-
-    setIsResettingPassword(true);
-    setError('');
-    setSuccessMessage('');
-
-    try {
-      let emailToUse = identifier;
-
-      // If the identifier doesn't look like an email, try to find the email from username
-      if (!identifier.includes('@')) {
-        const usersRef = collection(db, 'users');
-        const q = query(usersRef, where('username', '==', identifier));
-        const querySnapshot = await getDocs(q);
-
-        if (querySnapshot.empty) {
-          setError('No user found with this username');
-          setIsResettingPassword(false);
-          return;
-        }
-
-        emailToUse = querySnapshot.docs[0].data().email;
-      }
-
-      await sendPasswordResetEmail(auth, emailToUse);
-      setSuccessMessage('Password reset email sent! Please check your inbox.');
-    } catch (error) {
-      if (error instanceof FirebaseError) {
-        switch (error.code) {
-          case 'auth/invalid-email':
-            setError('Invalid email format');
-            break;
-          case 'auth/user-not-found':
-            setError('No account found with this email');
-            break;
-          default:
-            setError('Failed to send reset email. Please try again.');
-        }
-      } else {
-        setError('An unexpected error occurred');
-      }
-    }
-    setIsResettingPassword(false);
+    return null;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    setSuccessMessage('');
     setIsSubmitting(true);
+    setError(null);
+
+    if (!captchaToken) {
+      setError('Please complete the CAPTCHA verification');
+      setIsSubmitting(false);
+      return;
+    }
+
+    const emailError = validateEmail(formData.email);
+    if (emailError) {
+      setError(emailError);
+      setIsSubmitting(false);
+      return;
+    }
 
     try {
-      // Set persistence based on remember me checkbox
-      await setPersistence(auth, rememberMe ? browserLocalPersistence : browserSessionPersistence);
-
-      let emailToUse = identifier;
-
-      // If the identifier doesn't look like an email, assume it's a username
-      if (!identifier.includes('@')) {
-        // Query Firestore to find the email associated with the username
-        const usersRef = collection(db, 'users');
-        const q = query(usersRef, where('username', '==', identifier));
-        const querySnapshot = await getDocs(q);
-
-        if (querySnapshot.empty) {
-          setError('No user found with this username');
-          setIsSubmitting(false);
-          return;
-        }
-
-        emailToUse = querySnapshot.docs[0].data().email;
-      }
-
-      // Attempt to sign in with the email
-      await signInWithEmailAndPassword(auth, emailToUse, password);
+      await signInWithEmailAndPassword(auth, formData.email, formData.password);
       router.push('/dashboard');
-    } catch (error) {
-      if (error instanceof FirebaseError) {
-        switch (error.code) {
+    } catch (err) {
+      if (err instanceof FirebaseError) {
+        switch (err.code) {
           case 'auth/invalid-email':
-            setError('Invalid email format');
+            setError('Invalid email address');
+            break;
+          case 'auth/user-disabled':
+            setError('This account has been disabled');
             break;
           case 'auth/user-not-found':
-            setError('No account found with these credentials');
+            setError('No account found with this email');
             break;
           case 'auth/wrong-password':
             setError('Incorrect password');
             break;
           default:
-            setError('Failed to login. Please check your credentials.');
+            setError(err.message);
         }
       } else {
-        setError('An unexpected error occurred');
+        setError('An error occurred during login');
       }
       setIsSubmitting(false);
     }
@@ -141,9 +93,9 @@ export default function Login() {
           Sign in to your account
         </h2>
         <p className="mt-2 text-center text-sm text-gray-200">
-          Or{' '}
+          Don&apos;t have an account?{' '}
           <Link href="/signup" className="font-medium text-crimson-300 hover:text-crimson-200">
-            create a new account
+            Sign up
           </Link>
         </p>
       </div>
@@ -165,72 +117,46 @@ export default function Login() {
                 <span className="block sm:inline">{error}</span>
               </div>
             )}
-            {successMessage && (
-              <div className="bg-green-50 border border-green-400 text-green-700 px-4 py-3 rounded relative" role="alert">
-                <span className="block sm:inline">{successMessage}</span>
-              </div>
-            )}
+
             <div>
-              <label htmlFor="identifier" className="block text-sm font-medium text-gray-900">
-                Email or Username
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                ULM Email Address
               </label>
-              <div className="mt-1">
-                <input
-                  id="identifier"
-                  name="identifier"
-                  type="text"
-                  autoComplete="email"
-                  required
-                  value={identifier}
-                  onChange={(e) => setIdentifier(e.target.value)}
-                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-crimson-500 focus:border-crimson-500 sm:text-sm"
-                  placeholder="Enter your email or username"
-                />
-              </div>
+              <input
+                id="email"
+                name="email"
+                type="email"
+                autoComplete="email"
+                required
+                value={formData.email}
+                onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-crimson-500 focus:border-crimson-500 sm:text-sm"
+                placeholder="your.name@warhawks.ulm.edu"
+              />
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-900">
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
                 Password
               </label>
-              <div className="mt-1">
-                <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  autoComplete="current-password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-crimson-500 focus:border-crimson-500 sm:text-sm"
-                  placeholder="Enter your password"
-                />
-              </div>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                required
+                value={formData.password}
+                onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
+                className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-crimson-500 focus:border-crimson-500 sm:text-sm"
+                placeholder="Enter your password"
+              />
             </div>
 
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <input
-                  id="remember-me"
-                  name="remember-me"
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="h-4 w-4 text-crimson-600 focus:ring-crimson-500 border-gray-300 rounded"
-                />
-                <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900">
-                  Remember me
-                </label>
-              </div>
-
-              <button
-                type="button"
-                onClick={handlePasswordReset}
-                disabled={isResettingPassword}
-                className="text-sm font-medium text-crimson-600 hover:text-crimson-500 disabled:opacity-50"
-              >
-                {isResettingPassword ? 'Sending...' : 'Forgot your password?'}
-              </button>
+            <div className="flex justify-center">
+              <ReCAPTCHA
+                sitekey={process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY || ''}
+                onChange={(token: string | null) => setCaptchaToken(token)}
+              />
             </div>
 
             <div>

@@ -9,26 +9,34 @@ import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { FirebaseError } from 'firebase/app';
-import type { UserClassification } from '@/lib/firebase';
+import type { UserClassification, UserRole } from '@/lib/firebase';
 import ReCAPTCHA from 'react-google-recaptcha';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 
 export default function SignUpPage() {
-  const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [classification, setClassification] = useState<UserClassification>('Freshman');
+  const [formData, setFormData] = useState({
+    firstName: '',
+    lastName: '',
+    emailPrefix: '',
+    password: '',
+    confirmPassword: '',
+    classification: 'Freshman' as UserClassification,
+    role: 'Not a Member' as UserRole
+  });
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const router = useRouter();
+
+  const getFullEmail = () => `${formData.emailPrefix}@warhawks.ulm.edu`;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     setError(null);
 
-    if (password !== confirmPassword) {
+    // Validation checks
+    if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');
       setIsSubmitting(false);
       return;
@@ -40,27 +48,61 @@ export default function SignUpPage() {
       return;
     }
 
-    if (password.length < 6) {
+    if (formData.password.length < 6) {
       setError('Password must be at least 6 characters long');
       setIsSubmitting(false);
       return;
     }
 
-    if (username.length < 3) {
-      setError('Username must be at least 3 characters long');
+    if (!formData.emailPrefix.trim()) {
+      setError('Email prefix is required');
       setIsSubmitting(false);
       return;
     }
 
+    if (!formData.firstName.trim() || !formData.lastName.trim()) {
+      setError('First name and last name are required');
+      setIsSubmitting(false);
+      return;
+    }
+
+    const fullEmail = getFullEmail();
+
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      // First, check if a student record exists
+      const studentsRef = collection(db, 'users');
+      const q = query(studentsRef, where('email', '==', fullEmail));
+      const studentSnapshot = await getDocs(q);
+      
+      let existingRole: UserRole = 'Not a Member';
+      let existingClassification: UserClassification = formData.classification;
+      let studentId = '';
+
+      // If student record exists, use their role and classification
+      if (!studentSnapshot.empty) {
+        const studentData = studentSnapshot.docs[0].data();
+        existingRole = studentData.role as UserRole;
+        existingClassification = studentData.classification as UserClassification;
+        studentId = studentData.studentId || '';
+      }
+
+      // Create the authentication user
+      const userCredential = await createUserWithEmailAndPassword(auth, fullEmail, formData.password);
       const user = userCredential.user;
+
+      // Format names with proper capitalization
+      const formattedFirstName = formData.firstName.charAt(0).toUpperCase() + formData.firstName.slice(1).toLowerCase();
+      const formattedLastName = formData.lastName.charAt(0).toUpperCase() + formData.lastName.slice(1).toLowerCase();
 
       // Create user document in Firestore
       await setDoc(doc(db, 'users', user.uid), {
-        email: user.email,
-        username,
-        classification,
+        uid: user.uid,
+        email: fullEmail,
+        firstName: formattedFirstName,
+        lastName: formattedLastName,
+        classification: existingClassification,
+        role: existingRole,
+        studentId: studentId,
         createdAt: new Date(),
       });
 
@@ -134,101 +176,111 @@ export default function SignUpPage() {
               </div>
             )}
 
-            <div>
-              <label htmlFor="username" className="block text-sm font-medium text-gray-900">
-                Username
-              </label>
-              <div className="mt-1">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="firstName" className="block text-sm font-medium text-gray-700">
+                  First Name
+                </label>
                 <input
-                  id="username"
-                  name="username"
+                  id="firstName"
+                  name="firstName"
                   type="text"
-                  autoComplete="username"
                   required
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  value={formData.firstName}
+                  onChange={(e) => setFormData(prev => ({ ...prev, firstName: e.target.value }))}
                   className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-crimson-500 focus:border-crimson-500 sm:text-sm"
-                  placeholder="Choose a username"
+                  placeholder="John"
                 />
               </div>
-            </div>
-
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-900">
-                Email address
-              </label>
-              <div className="mt-1">
+              <div>
+                <label htmlFor="lastName" className="block text-sm font-medium text-gray-700">
+                  Last Name
+                </label>
                 <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
+                  id="lastName"
+                  name="lastName"
+                  type="text"
                   required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  value={formData.lastName}
+                  onChange={(e) => setFormData(prev => ({ ...prev, lastName: e.target.value }))}
                   className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-crimson-500 focus:border-crimson-500 sm:text-sm"
-                  placeholder="Enter your email"
+                  placeholder="Doe"
                 />
               </div>
             </div>
 
             <div>
-              <label htmlFor="classification" className="block text-sm font-medium text-gray-900">
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                ULM Email
+              </label>
+              <div className="mt-1 flex rounded-md shadow-sm">
+                <input
+                  id="emailPrefix"
+                  name="emailPrefix"
+                  type="text"
+                  required
+                  value={formData.emailPrefix}
+                  onChange={(e) => setFormData(prev => ({ ...prev, emailPrefix: e.target.value }))}
+                  className="appearance-none flex-1 block w-full px-3 py-2 border border-r-0 border-gray-300 rounded-l-md shadow-sm placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-crimson-500 focus:border-crimson-500 sm:text-sm"
+                  placeholder="your.name"
+                />
+                <span className="inline-flex items-center px-3 py-2 border border-l-0 border-gray-300 bg-gray-50 text-gray-500 sm:text-sm rounded-r-md">
+                  @warhawks.ulm.edu
+                </span>
+              </div>
+            </div>
+
+            <div>
+              <label htmlFor="classification" className="block text-sm font-medium text-gray-700">
                 Classification
               </label>
-              <div className="mt-1">
-                <select
-                  id="classification"
-                  name="classification"
-                  required
-                  value={classification}
-                  onChange={(e) => setClassification(e.target.value as UserClassification)}
-                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-crimson-500 focus:border-crimson-500 sm:text-sm"
-                >
-                  <option value="Freshman">Freshman</option>
-                  <option value="Sophomore">Sophomore</option>
-                  <option value="Junior">Junior</option>
-                  <option value="Senior">Senior</option>
-                </select>
-              </div>
+              <select
+                id="classification"
+                name="classification"
+                required
+                value={formData.classification}
+                onChange={(e) => setFormData(prev => ({ ...prev, classification: e.target.value as UserClassification }))}
+                className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-crimson-500 focus:border-crimson-500 sm:text-sm"
+              >
+                <option value="Freshman">Freshman</option>
+                <option value="Sophomore">Sophomore</option>
+                <option value="Junior">Junior</option>
+                <option value="Senior">Senior</option>
+              </select>
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-900">
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
                 Password
               </label>
-              <div className="mt-1">
-                <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  autoComplete="new-password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-crimson-500 focus:border-crimson-500 sm:text-sm"
-                  placeholder="Choose a strong password"
-                />
-              </div>
+              <input
+                id="password"
+                name="password"
+                type="password"
+                autoComplete="new-password"
+                required
+                value={formData.password}
+                onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
+                className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-crimson-500 focus:border-crimson-500 sm:text-sm"
+                placeholder="Choose a strong password"
+              />
             </div>
 
             <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-900">
+              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
                 Confirm Password
               </label>
-              <div className="mt-1">
-                <input
-                  id="confirmPassword"
-                  name="confirmPassword"
-                  type="password"
-                  autoComplete="new-password"
-                  required
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-crimson-500 focus:border-crimson-500 sm:text-sm"
-                  placeholder="Confirm your password"
-                />
-              </div>
+              <input
+                id="confirmPassword"
+                name="confirmPassword"
+                type="password"
+                autoComplete="new-password"
+                required
+                value={formData.confirmPassword}
+                onChange={(e) => setFormData(prev => ({ ...prev, confirmPassword: e.target.value }))}
+                className="appearance-none block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-crimson-500 focus:border-crimson-500 sm:text-sm"
+                placeholder="Confirm your password"
+              />
             </div>
 
             <div className="flex justify-center">

@@ -1,45 +1,49 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
 
 const boardMembers = [
   '/images/Boardmember/president.jpeg',
-  '/images/Boardmember/1.png',
   '/images/Boardmember/2.png',
+  '/images/Boardmember/1.png',
   '/images/Boardmember/4.png?v=2',
+  '/images/Boardmember/13.png',
   '/images/Boardmember/6.png',
   '/images/Boardmember/7.png',
   '/images/Boardmember/8.png',
   '/images/Boardmember/9.png',
+  '/images/Boardmember/14.png',
   '/images/Boardmember/11.png',
   '/images/Boardmember/12.png'
 ];
 
 export default function BoardMembers() {
-  const [startIndex, setStartIndex] = useState(0);
-  const cardsToShow = 3; // Number of cards to show at once
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isAnimating, setIsAnimating] = useState(false);
 
-  const nextSlide = () => {
-    setStartIndex((prevIndex) => 
-      prevIndex + cardsToShow >= boardMembers.length ? 0 : prevIndex + 1
-    );
-  };
+  useEffect(() => {
+    const timer = setInterval(() => {
+      handleNext();
+    }, 3000);
 
-  const prevSlide = () => {
-    setStartIndex((prevIndex) => 
-      prevIndex === 0 ? boardMembers.length - cardsToShow : prevIndex - 1
-    );
-  };
+    return () => clearInterval(timer);
+  }, []);
 
-  // Get the current visible cards
-  const visibleCards = () => {
-    const cards = [];
-    for (let i = 0; i < cardsToShow; i++) {
-      const index = (startIndex + i) % boardMembers.length;
-      cards.push(boardMembers[index]);
+  const handleNext = () => {
+    if (!isAnimating) {
+      setIsAnimating(true);
+      setCurrentIndex((prev) => (prev + 1) % boardMembers.length);
+      setTimeout(() => setIsAnimating(false), 500);
     }
-    return cards;
+  };
+
+  const handlePrev = () => {
+    if (!isAnimating) {
+      setIsAnimating(true);
+      setCurrentIndex((prev) => (prev - 1 + boardMembers.length) % boardMembers.length);
+      setTimeout(() => setIsAnimating(false), 500);
+    }
   };
 
   return (
@@ -54,39 +58,78 @@ export default function BoardMembers() {
           </p>
         </div>
 
-        <div className="relative px-12">
-          {/* Cards container */}
-          <div className="flex justify-center gap-8">
-            {visibleCards().map((image, index) => (
-              <div
-                key={`${image}-${index}`}
-                className="w-[300px] h-[400px] bg-white rounded-xl shadow-lg overflow-hidden transform transition-all duration-500 hover:scale-105"
-              >
-                <div className="relative w-full h-full">
-                  <Image
-                    src={image}
-                    alt="Board Member"
-                    fill
-                    className="object-cover"
-                    sizes="(max-width: 300px) 100vw, 300px"
-                  />
+        <div className="relative mx-auto max-w-[1200px] h-[600px] overflow-hidden">
+          <div className="absolute w-full h-full flex items-center justify-center">
+            {boardMembers.map((image, index) => {
+              const position = (index - currentIndex + boardMembers.length) % boardMembers.length;
+              const isActive = position === 0;
+              const isPrev = position === boardMembers.length - 1;
+              const isNext = position === 1;
+              
+              let translateX = '100%';
+              let translateZ = '-500px';
+              let opacity = '0';
+              let scale = '0.8';
+              let zIndex = 0;
+
+              if (isActive) {
+                translateX = '0';
+                translateZ = '0';
+                opacity = '1';
+                scale = '1';
+                zIndex = 30;
+              } else if (isPrev) {
+                translateX = '-100%';
+                translateZ = '-250px';
+                opacity = '0.7';
+                scale = '0.9';
+                zIndex = 20;
+              } else if (isNext) {
+                translateX = '100%';
+                translateZ = '-250px';
+                opacity = '0.7';
+                scale = '0.9';
+                zIndex = 20;
+              }
+
+              return (
+                <div
+                  key={image}
+                  className="absolute w-[400px] h-[500px] transition-all duration-500 ease-in-out"
+                  style={{
+                    transform: `translateX(${translateX}) translateZ(${translateZ}) scale(${scale})`,
+                    opacity,
+                    zIndex,
+                  }}
+                >
+                  <div className="relative w-full h-full rounded-xl shadow-xl overflow-hidden">
+                    <Image
+                      src={image}
+                      alt="Board Member"
+                      fill
+                      className="object-cover"
+                      sizes="(max-width: 400px) 100vw, 400px"
+                    />
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
-          {/* Navigation arrows */}
+          {/* Navigation buttons */}
           <button
-            onClick={prevSlide}
-            className="absolute left-0 top-1/2 -translate-y-1/2 bg-white hover:bg-gray-100 p-3 rounded-full shadow-lg z-10 transition-all hover:scale-110"
+            onClick={handlePrev}
+            className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white p-3 rounded-full shadow-lg z-40 transition-all hover:scale-110"
+            disabled={isAnimating}
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-crimson-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
           <button
-            onClick={nextSlide}
-            className="absolute right-0 top-1/2 -translate-y-1/2 bg-white hover:bg-gray-100 p-3 rounded-full shadow-lg z-10 transition-all hover:scale-110"
+            onClick={handleNext}
+            className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white p-3 rounded-full shadow-lg z-40 transition-all hover:scale-110"
+            disabled={isAnimating}
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-crimson-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />

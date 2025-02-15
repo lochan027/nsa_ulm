@@ -4,15 +4,31 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer utilities {
+  .perspective-1000 {
+    perspective: 1000px;
+  }
+  
+  .transform-style-3d {
+    transform-style: preserve-3d;
+  }
+  
+  .preserve-3d {
+    transform-style: preserve-3d;
+  }
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --foreground-rgb: 0, 0, 0;
+  --background-start-rgb: 214, 219, 220;
+  --background-end-rgb: 255, 255, 255;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --foreground-rgb: 255, 255, 255;
+    --background-start-rgb: 0, 0, 0;
+    --background-end-rgb: 0, 0, 0;
   }
 }
 
@@ -20,4 +36,57 @@ body {
   color: var(--foreground);
   background: var(--background);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Calendar Custom Styles */
+.rbc-calendar {
+  @apply font-sans;
+}
+
+.rbc-header {
+  @apply py-2 font-semibold text-gray-700 text-sm border-b border-gray-200;
+}
+
+.rbc-off-range-bg {
+  @apply bg-gray-50;
+}
+
+.rbc-today {
+  @apply bg-crimson-50;
+}
+
+.rbc-event {
+  @apply bg-crimson-600 border-none rounded-md;
+}
+
+.rbc-event.rbc-selected {
+  @apply bg-crimson-700;
+}
+
+.rbc-event-content {
+  @apply text-sm font-medium;
+}
+
+.rbc-show-more {
+  @apply text-crimson-600 hover:text-crimson-700 font-medium;
+}
+
+.rbc-month-view {
+  @apply border border-gray-200 rounded-lg overflow-hidden;
+}
+
+.rbc-month-row {
+  @apply border-gray-200;
+}
+
+.rbc-date-cell {
+  @apply text-right p-1;
+}
+
+.rbc-date-cell > a {
+  @apply text-sm text-gray-600 font-normal;
+}
+
+.rbc-today .rbc-date-cell > a {
+  @apply text-crimson-600 font-semibold;
 }

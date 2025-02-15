@@ -18,12 +18,17 @@ export const db = getFirestore(app);
 
 export type UserClassification = 'Freshman' | 'Sophomore' | 'Junior' | 'Senior';
 
+export type UserRole = 'Not a Member' | 'Member' | 'Board Member' | 'President';
+
 export interface UserProfile {
   uid: string;
   email: string;
-  username: string;
+  firstName: string;
+  lastName: string;
   classification: UserClassification;
+  role: UserRole;
   createdAt: Date;
+  studentId: string;
 }
 
 export default app; 
